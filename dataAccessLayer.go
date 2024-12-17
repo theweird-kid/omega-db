@@ -27,7 +27,8 @@ type DAL struct {
 // Create a new DAL object
 func NewDAL(path string, pageSize int32) (*DAL, error) {
 	dal := &DAL{
-		Meta: NewEmptyMeta(),
+		Meta:     NewEmptyMeta(),
+		pageSize: pageSize,
 	}
 
 	if _, err := os.Stat(path); err == nil {
@@ -136,4 +137,29 @@ func (dal *DAL) ReadFreelist() (*FreeList, error) {
 	freelist := NewFreeList()
 	freelist.deserialize(page.data)
 	return freelist, nil
+}
+
+// Write Meta to Page
+func (dal *DAL) WriteMeta(meta *Meta) (*Page, error) {
+	page, _ := dal.AllocateEmptyPage()
+	page.num = metaPageNum
+	meta.serialize(page.data)
+
+	err := dal.WritePage(page)
+	if err != nil {
+		return nil, err
+	}
+	return page, nil
+}
+
+// Read Meta from Page
+func (dal *DAL) ReadMeta() (*Meta, error) {
+	page, err := dal.ReadPage(metaPageNum)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading meta page: %v", err)
+	}
+
+	meta := NewEmptyMeta()
+	meta.deserialize(page.data)
+	return meta, nil
 }
