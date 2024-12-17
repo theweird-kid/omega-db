@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 )
@@ -19,18 +20,53 @@ type DAL struct {
 	pageSize int32
 	// Track allocated and free pages
 	*FreeList
+	// Meta page
+	*Meta
 }
 
 // Create a new DAL object
 func NewDAL(path string, pageSize int32) (*DAL, error) {
-	dal := &DAL{}
-	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
-	if err != nil {
+	dal := &DAL{
+		Meta: NewEmptyMeta(),
+	}
+
+	if _, err := os.Stat(path); err == nil {
+		dal.file, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+		if err != nil {
+			_ = dal.Close()
+			return nil, err
+		}
+
+		meta, err := dal.ReadMeta()
+		if err != nil {
+			return nil, err
+		}
+		dal.Meta = meta
+
+		freelist, err := dal.ReadFreelist()
+		if err != nil {
+			return nil, err
+		}
+		dal.FreeList = freelist
+
+	} else if errors.Is(err, os.ErrNotExist) {
+
+		dal.file, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
+		if err != nil {
+			_ = dal.Close()
+			return nil, err
+		}
+
+		dal.FreeList = NewFreeList()
+		dal.freelistPage = dal.GetNextPage()
+		_, err := dal.WriteFreeList()
+		if err != nil {
+			return nil, err
+		}
+		_, err = dal.WriteMeta(dal.Meta)
+	} else {
 		return nil, err
 	}
-	dal.file = file
-	dal.pageSize = pageSize
-	dal.FreeList = NewFreeList()
 	return dal, nil
 }
 
@@ -75,4 +111,29 @@ func (dal *DAL) WritePage(page *Page) error {
 		return fmt.Errorf("Error writing page: %v", err)
 	}
 	return nil
+}
+
+func (dal *DAL) WriteFreeList() (*Page, error) {
+	page, _ := dal.AllocateEmptyPage()
+	page.num = dal.freelistPage
+	dal.FreeList.serialize(page.data)
+
+	err := dal.WritePage(page)
+	if err != nil {
+		return nil, err
+	}
+
+	dal.freelistPage = page.num
+	return page, nil
+}
+
+func (dal *DAL) ReadFreelist() (*FreeList, error) {
+	page, err := dal.ReadPage(dal.freelistPage)
+	if err != nil {
+		return nil, err
+	}
+
+	freelist := NewFreeList()
+	freelist.deserialize(page.data)
+	return freelist, nil
 }
