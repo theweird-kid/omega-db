@@ -17,6 +17,8 @@ type Page struct {
 type DAL struct {
 	file     *os.File
 	pageSize int32
+	// Track allocated and free pages
+	*FreeList
 }
 
 // Create a new DAL object
@@ -28,6 +30,7 @@ func NewDAL(path string, pageSize int32) (*DAL, error) {
 	}
 	dal.file = file
 	dal.pageSize = pageSize
+	dal.FreeList = NewFreeList()
 	return dal, nil
 }
 
