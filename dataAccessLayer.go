@@ -31,7 +31,7 @@ func NewDAL(path string, pageSize int32) (*DAL, error) {
 		pageSize: pageSize,
 	}
 
-	if _, err := os.Stat(path); err == nil {
+	if _, err := os.Stat(path); err == nil { // if file already exists
 		dal.file, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
 		if err != nil {
 			_ = dal.Close()
@@ -50,7 +50,7 @@ func NewDAL(path string, pageSize int32) (*DAL, error) {
 		}
 		dal.FreeList = freelist
 
-	} else if errors.Is(err, os.ErrNotExist) {
+	} else if errors.Is(err, os.ErrNotExist) { // if file does not exist, create a new file
 
 		dal.file, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
 		if err != nil {
