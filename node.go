@@ -1,6 +1,9 @@
 package main
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+	"log"
+)
 
 // B Tree Implementation
 
@@ -145,4 +148,21 @@ func (n *Node) Deserialize(buf []byte) {
 		pageNum := PageNum(binary.LittleEndian.Uint64(buf[leftPos:]))
 		n.childNodes = append(n.childNodes, pageNum)
 	}
+}
+
+func (node *Node) WriteNode(n *Node) *Node {
+	ret, _ := node.DAL.writeNode(n)
+	return ret
+}
+
+func (node *Node) WriteNodes(ns ...*Node) {
+	for _, n := range ns {
+		node.DAL.writeNode(n)
+	}
+}
+
+func (node *Node) GetNode(pageNum PageNum) (*Node, error) {
+	ret, err := node.DAL.getNode(pageNum)
+	log.Println("ret: ", ret)
+	return ret, err
 }

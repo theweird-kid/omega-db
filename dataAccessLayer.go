@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 )
 
@@ -25,10 +26,10 @@ type DAL struct {
 }
 
 // Create a new DAL object
-func NewDAL(path string, pageSize int32) (*DAL, error) {
+func NewDAL(path string) (*DAL, error) {
 	dal := &DAL{
 		Meta:     NewEmptyMeta(),
-		pageSize: pageSize,
+		pageSize: int32(os.Getpagesize()),
 	}
 
 	if _, err := os.Stat(path); err == nil { // if file already exists
@@ -49,21 +50,22 @@ func NewDAL(path string, pageSize int32) (*DAL, error) {
 			return nil, err
 		}
 		dal.FreeList = freelist
-
 	} else if errors.Is(err, os.ErrNotExist) { // if file does not exist, create a new file
-
 		dal.file, err = os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0666)
 		if err != nil {
 			_ = dal.Close()
 			return nil, err
 		}
 
+		// Init freeList
 		dal.FreeList = NewFreeList()
 		dal.freelistPage = dal.GetNextPage()
 		_, err := dal.WriteFreeList()
 		if err != nil {
 			return nil, err
 		}
+
+		// Write Meta page
 		_, err = dal.WriteMeta(dal.Meta)
 	} else {
 		return nil, err
@@ -95,16 +97,16 @@ func (dal *DAL) ReadPage(pageNum PageNum) (*Page, error) {
 	page, _ := dal.AllocateEmptyPage()
 
 	// Calculate the offset
-	offset := int64(pageNum) * int64(dal.pageSize)
+	offset := int(pageNum) * int(dal.pageSize)
 	// Read the page data
-	_, err := dal.file.ReadAt(page.data, offset)
+	_, err := dal.file.ReadAt(page.data, int64(offset))
 	if err != nil {
 		return nil, fmt.Errorf("Error reading page: %v", err)
 	}
 	return page, nil
 }
 
-// Write a page to the DAL
+// Write a page to the file
 func (dal *DAL) WritePage(page *Page) error {
 	offset := int64(page.num) * int64(dal.pageSize)
 	_, err := dal.file.WriteAt(page.data, offset)
@@ -114,6 +116,7 @@ func (dal *DAL) WritePage(page *Page) error {
 	return nil
 }
 
+// Write FreeList into a Page
 func (dal *DAL) WriteFreeList() (*Page, error) {
 	page, _ := dal.AllocateEmptyPage()
 	page.num = dal.freelistPage
@@ -128,6 +131,7 @@ func (dal *DAL) WriteFreeList() (*Page, error) {
 	return page, nil
 }
 
+// Read Freelist from a Page
 func (dal *DAL) ReadFreelist() (*FreeList, error) {
 	page, err := dal.ReadPage(dal.freelistPage)
 	if err != nil {
@@ -162,4 +166,38 @@ func (dal *DAL) ReadMeta() (*Meta, error) {
 	meta := NewEmptyMeta()
 	meta.deserialize(page.data)
 	return meta, nil
+}
+
+// Get Node from the DAL
+func (dal *DAL) getNode(pageNum PageNum) (*Node, error) {
+	page, err := dal.ReadPage(pageNum)
+	if err != nil {
+		return nil, err
+	}
+
+	node := NewEmptyNode()
+	log.Println("Debug: ", node)
+	node.Deserialize(page.data)
+	node.pageNum = pageNum
+	return node, nil
+}
+
+// Write Node
+func (dal *DAL) writeNode(node *Node) (*Node, error) {
+	page, _ := dal.AllocateEmptyPage()
+	if node.pageNum == 0 {
+		page.num = dal.GetNextPage()
+		node.pageNum = page.num
+	} else {
+		page.num = node.pageNum
+	}
+
+	page.data = node.Serialize(page.data)
+
+	err := dal.WritePage(page)
+	if err != nil {
+		return nil, err
+	}
+
+	return node, nil
 }

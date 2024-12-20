@@ -1,38 +1,20 @@
 package main
 
 import (
-	"os"
+	"fmt"
 )
 
 func main() {
-	// init omega-db
-	dal, _ := NewDAL("omega.db", int32(os.Getpagesize()))
+	// init db
+	dal, _ := NewDAL("mainTest")
 
-	// create a new page
-	page, _ := dal.AllocateEmptyPage()
-	page.num = dal.GetNextPage()
-	copy(page.data, []byte("Hello, World!"))
+	node, _ := dal.getNode(dal.root)
+	node.DAL = dal
 
-	// commit update
-	_ = dal.WritePage(page)
-	_, _ = dal.WriteFreeList()
+	idx, containingNode, _ := node.findKey([]byte("Key1"))
+	res := containingNode.items[idx]
 
-	// close omega-db
+	fmt.Printf("key is: %s, value is: %s\n", res.key, res.value)
+	// close the db
 	_ = dal.Close()
-
-	// re-open omega-db
-	dal, _ = NewDAL("omega.db", int32(os.Getpagesize()))
-
-	// create a new page
-	page, _ = dal.AllocateEmptyPage()
-	page.num = dal.GetNextPage()
-	copy(page.data[:], []byte("Bye, World!"))
-	_ = dal.WritePage(page)
-
-	// Create a page and release it
-	pagenum := dal.GetNextPage()
-	dal.ReleasePage(pagenum)
-
-	// commit update
-	_, _ = dal.WriteFreeList()
 }
